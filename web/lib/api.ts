@@ -11,6 +11,8 @@ const FRIENDLY: Record<string, string> = {
   email_not_verified: 'Please confirm your email first (step 1).',
   invalid_token: 'That code didn’t work — it may be old or already used.',
   invalid_code: 'Wrong code. Check the message and try again.',
+  invalid_phone: 'That phone number doesn’t look right. Use digits with country code, e.g. +15551234567.',
+  pairing_unavailable_retry: 'WhatsApp is throttling pairing codes right now. Wait a few minutes and try again.',
   unauthorized: 'You’ve been logged out. Please log in again.',
   forbidden: 'You don’t have access to that.',
   no_verified_destination: 'Verify your recovery number first (step 4).',

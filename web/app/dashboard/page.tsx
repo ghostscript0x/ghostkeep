@@ -17,6 +17,9 @@ function Step({ n, done, title, children }: { n: number; done: boolean; title: s
 export default function Dashboard() {
   const [me, setMe] = useState<any>(null);
   const [qr, setQr] = useState('');
+  const [linkTab, setLinkTab] = useState<'qr' | 'code'>('qr');
+  const [pairPhone, setPairPhone] = useState('');
+  const [pairCode, setPairCode] = useState('');
   const [riskTick, setRiskTick] = useState(false);
   const [dest, setDest] = useState('');
   const [code, setCode] = useState('');
@@ -85,20 +88,42 @@ export default function Dashboard() {
 
       <div className="gk-card">
         <Step n={3} done={linked} title="Link your WhatsApp">
-          <p className="gk-sub">We&apos;ll show a QR code. On your phone open <b>WhatsApp → Settings → Linked devices → Link a device</b> and scan it.</p>
+          <div className="gk-tabs">
+            <button className={`gk-btn ghost${linkTab === 'qr' ? ' active-tab' : ''}`} onClick={() => setLinkTab('qr')}>📷 Scan QR code</button>
+            <button className={`gk-btn ghost${linkTab === 'code' ? ' active-tab' : ''}`} onClick={() => setLinkTab('code')}>🔢 Use pairing code</button>
+          </div>
+          {linkTab === 'qr' ? (<>
+            <p className="gk-sub">We&apos;ll show a QR code. On your phone open <b>WhatsApp → Settings → Linked devices → Link a device</b> and scan it.</p>
+            <div className="gk-row">
+              <button className="gk-btn" disabled={busy || !riskOk} onClick={() => run(async () => { const r = await api('/whatsapp/session/start', { method: 'POST' }); setQr(r.qrDataUrl || ''); setMsg(r.qrDataUrl ? 'QR ready — scan it with your phone.' : 'Already connected — nothing to scan.'); })}>Show QR code</button>
+              <button className="gk-btn danger" disabled={busy} onClick={() => { if (confirm('Disconnect your WhatsApp from GhostKeep?')) run(() => api('/whatsapp/session', { method: 'DELETE' }), 'Disconnected.'); }}>Disconnect</button>
+            </div>
+            {qr && (<div className="gk-qr-wrap"><div className="gk-qr">
+              <img src={qr} alt="WhatsApp pairing QR code" width={240} />
+              <p>Scan within about a minute. If it expires, just tap “Show QR code” again.</p>
+            </div></div>)}
+          </>) : (<>
+            <p className="gk-sub">No camera handy? Type your WhatsApp number, get an 8-character code, and enter it on your phone under <b>WhatsApp → Settings → Linked devices → Link with phone number instead</b>.</p>
+            <label className="gk-sub" htmlFor="gk-pairphone">Your WhatsApp number</label>
+            <input id="gk-pairphone" className="gk-input" placeholder="+15551234567" inputMode="tel" value={pairPhone} onChange={(e) => setPairPhone(e.target.value)} />
+            <div className="gk-row">
+              <button className="gk-btn" disabled={busy || !riskOk} onClick={() => run(async () => {
+                const r = await api('/whatsapp/session/pairing-code', { method: 'POST', body: JSON.stringify({ phone: pairPhone }) });
+                if ('paired' in r) { setPairCode(''); setMsg('Already connected — nothing to enter.'); }
+                else { setPairCode(r.code); setMsg('Code ready — type it into WhatsApp on your phone.'); }
+              })}>Get pairing code</button>
+              <button className="gk-btn danger" disabled={busy} onClick={() => { if (confirm('Disconnect your WhatsApp from GhostKeep?')) run(() => api('/whatsapp/session', { method: 'DELETE' }), 'Disconnected.'); }}>Disconnect</button>
+            </div>
+            {pairCode && (<div className="gk-qr-wrap"><div className="gk-qr">
+              <p style={{ fontSize: 34, fontWeight: 800, letterSpacing: 6, color: '#0e1f13', margin: 0 }}>{pairCode}</p>
+              <p>Enter this on your phone. Codes expire quickly — request a fresh one if it fails.</p>
+            </div></div>)}
+          </>)}
           <div className="gk-row">
             <span>Status:</span>
             <span className={`gk-pill ${status}`}>{status.replace(/_/g, ' ')}</span>
           </div>
-          {!riskOk && <p className="gk-sub">☝️ Finish step 2 first — the button unlocks after you accept the risks.</p>}
-          <div className="gk-row">
-            <button className="gk-btn" disabled={busy || !riskOk} onClick={() => run(async () => { const r = await api('/whatsapp/session/start', { method: 'POST' }); setQr(r.qrDataUrl || ''); setMsg(r.qrDataUrl ? 'QR ready — scan it with your phone.' : 'Already connected — nothing to scan.'); })}>Show QR code</button>
-            <button className="gk-btn danger" disabled={busy} onClick={() => { if (confirm('Disconnect your WhatsApp from GhostKeep?')) run(() => api('/whatsapp/session', { method: 'DELETE' }), 'Disconnected.'); }}>Disconnect</button>
-          </div>
-          {qr && (<div className="gk-qr-wrap"><div className="gk-qr">
-            <img src={qr} alt="WhatsApp pairing QR code" width={240} />
-            <p>Scan within about a minute. If it expires, just tap “Show QR code” again.</p>
-          </div></div>)}
+          {!riskOk && <p className="gk-sub">☝️ Finish step 2 first — linking unlocks after you accept the risks.</p>}
         </Step>
       </div>
 

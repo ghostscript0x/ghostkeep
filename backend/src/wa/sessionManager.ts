@@ -51,11 +51,7 @@ export class SessionManager {
     this.userClosed.delete(userId);
     this.reconnectAttempts.delete(userId);
     if (this.sockets.has(userId)) return { qr: '', expiresAt: Date.now() }; // already live; don't flap status
-    await pool.query(
-      `INSERT INTO whatsapp_sessions (user_id, encrypted_session_credentials, session_key_reference, connection_status)
-       VALUES ($1,'',$2,'connecting') ON CONFLICT (user_id) DO UPDATE SET connection_status='connecting', updated_at=now()`,
-      [userId, config.sessionCredKeyId],
-    );
+    await this.ensureSessionRow(userId);
     await this.connect(userId);
     for (let i = 0; i < 40; i++) {
       const hit = await this.transient.takeQrDataUrl(userId);
@@ -66,6 +62,35 @@ export class SessionManager {
       await new Promise((r) => setTimeout(r, 250));
     }
     return { qr: '', expiresAt: Date.now() };
+  }
+
+  private async ensureSessionRow(userId: string): Promise<void> {
+    await pool.query(
+      `INSERT INTO whatsapp_sessions (user_id, encrypted_session_credentials, session_key_reference, connection_status)
+       VALUES ($1,'',$2,'connecting') ON CONFLICT (user_id) DO UPDATE SET connection_status='connecting', updated_at=now()`,
+      [userId, config.sessionCredKeyId],
+    );
+  }
+
+  /**
+   * Pairing-code linking (QR alternative): the user types their number here,
+   * gets an 8-character code, and enters it in WhatsApp → Linked devices →
+   * "Link with phone number". WhatsApp rate-limits code requests, so the
+   * route carries its own strict limiter.
+   */
+  async requestPairingCode(userId: string, phone: string): Promise<{ code: string } | { paired: true }> {
+    this.userClosed.delete(userId);
+    this.reconnectAttempts.delete(userId);
+    if (this.sockets.has(userId)) return { paired: true };
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length < 8 || digits.length > 15) throw new Error('invalid_phone');
+    await this.ensureSessionRow(userId);
+    const sock = await this.connect(userId);
+    if (this.sockets.has(userId)) return { paired: true };
+    if (sock.authState.creds.registered) return { paired: true }; // will connect without a code
+    const code = await sock.requestPairingCode(digits);
+    logger.info({ userId, msg: 'pairing_code_issued' });
+    return { code };
   }
 
   private statusOf(userId: string): Promise<string> {
