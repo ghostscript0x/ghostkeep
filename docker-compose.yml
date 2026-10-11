@@ -1,0 +1,60 @@
+# GhostKeep — lean single-host deploy.
+#
+# Lowest-resource design: Postgres + Redis live on CasaOS already, so this
+# file runs ONLY the two stateless services (backend, web) and points them
+# at CasaOS via .env. No duplicate databases, no wasted RAM.
+# Expected footprint: ~150-250MB RAM total for both services.
+#
+# Deploy:
+#   1. cp .env.example .env   (fill secrets + CasaOS hosts + public WEB_URL)
+#   2. docker compose up -d --build
+#   3. docker compose logs -f
+#
+# Phones on your LAN need LAN-reachable URLs:
+#   WEB_URL=http://192.168.1.90:3000 (your host IP, not localhost)
+#   and build web with:  docker compose build --build-arg NEXT_PUBLIC_API_URL=http://192.168.1.90:4000 web
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "4000:4000"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 384M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # NOTE: one process owns the WhatsApp sockets (inside backend). Do NOT add
+  # a second socket-owning service — two owners knock each other offline.
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        # Overridable at build time; baked into client JS.
+        NEXT_PUBLIC_API_URL: ${API_PUBLIC_URL:-http://localhost:4000}
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
